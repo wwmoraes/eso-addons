@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<GuiXml xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sir.insidi.at/or/schema/esoui.xsd">
+  <Animations>
+    <AnimationTimeline name="AutoStatusChatMinMaxAnim" inherits="ChatMinMaxAnim" />
+  </Animations>
+  <Controls>
+    <TopLevelControl name="AutoStatusUI" hidden="false" layer="2" level="2" tier="2">
+      <OnInitialized>AutoStatus:UIOnInitialized(self)</OnInitialized>
+      <Anchor point="LEFT" relativeTo="ZO_ChatWindowNumNotifications" relativePoint="RIGHT" offsetX="2" />
+      <Dimensions x="48" y="32" />
+      <Controls>
+        <Control name="$(parent)ComboBox" mouseEnabled="true">
+          <Dimensions x="48" y="32" />
+          <Anchor point="TOPLEFT" />
+          <Controls>
+            <Button name="$(parent)Icon" mouseOverBlendMode="ADD">
+              <Dimensions x="32" y="32" />
+              <Anchor point="TOPLEFT" />
+              <Textures normal="EsoUI/Art/Contacts/social_status_offline.dds" mouseOver="EsoUI/Art/Contacts/social_status_highlight.dds" />
+              <OnMouseEnter>AutoStatus:UIOnMouseEnter()</OnMouseEnter>
+              <OnMouseExit>AutoStatus:UIOnMouseExit()</OnMouseExit>
+              <OnClicked>ZO_ComboBox_DropdownClicked(self:GetParent())</OnClicked>
+            </Button>
+            <Button name="$(parent)Open" inherits="ZO_DropdownButton">
+              <Dimensions x="16" y="16" />
+              <Anchor point="LEFT" relativeTo="$(parent)Icon" relativePoint="RIGHT" offsetX="-8" />
+              <OnMouseEnter>AutoStatus:UIOnMouseEnter()</OnMouseEnter>
+              <OnMouseExit>AutoStatus:UIOnMouseExit()</OnMouseExit>
+              <OnClicked>ZO_ComboBox_DropdownClicked(self:GetParent())</OnClicked>
+            </Button>
+          </Controls>
+          <OnInitialized>ZO_ComboBox:New(self)</OnInitialized>
+          <OnMouseUp>ZO_ComboBox_DropdownClicked(self)</OnMouseUp>
+        </Control>
+      </Controls>
+    </TopLevelControl>
+  </Controls>
+</GuiXml>

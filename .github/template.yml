@@ -1,0 +1,40 @@
+name: ${addonName}
+
+on:
+  push:
+    branches:
+      - "*"
+    paths:
+      - "addons/${addonName}/*.lua"
+      - "addons/${addonName}/*.xml"
+      - "addons/${addonName}/${addonName}.txt"
+
+env:
+  luaVersion: 5.1.5
+
+jobs:
+  lint:
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 1
+
+      - name: Install Lua ${{ env.luaVersion }}
+        uses: leafo/gh-actions-lua@v8.0.0
+        with:
+          luaVersion: ${{ env.luaVersion }}
+
+      - name: Install Luarocks
+        uses: leafo/gh-actions-luarocks@v4.0.0
+
+      - name: Install Luacheck
+        run: luarocks install luacheck
+
+      - name: Lint code
+        uses: nebularg/actions-luacheck@v1
+        with:
+          files: addons/${addonName}
+
+      # TODO "lint"/check ESOUI XML

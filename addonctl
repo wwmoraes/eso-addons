@@ -1,0 +1,275 @@
+#!/usr/bin/env lua
+
+local function getPwd()
+  local fd, err = io.popen("pwd")
+  if err ~= nil then
+    error(err)
+  end
+
+  local output = fd:read("*l")
+  fd:close()
+
+  return output
+end
+
+--- @class Manifest : ManifestManager
+--- @field AddOnVersion number
+--- @field APIVersion number[]
+--- @field Author string
+--- @field DependsOn string[]
+--- @field Description string
+--- @field DisableSavedVariablesAutoSaving '0'|'1'|nil
+--- @field IsLibrary boolean
+--- @field OptionalDependsOn string[]
+--- @field SavedVariables string[]
+--- @field Title string
+--- @field Version string
+
+--- @param value any
+--- @return boolean
+function iscallable(value)
+  if type(value) == "function" then
+    return true
+  elseif type(value) == "table" then
+    local mt = getmetatable(value)
+    if mt == nil then
+      return false
+    end
+
+    return type(mt.__call) == "function"
+  end
+
+  return false
+end
+
+local atob = {
+  ["false"] = false,
+  ["true"] = true,
+}
+function atob:__call(value)
+  local result = self[value]
+  if result == nil then
+    error(string.format("%s is not convertible to a boolean", value))
+  end
+  return result
+end
+setmetatable(atob, atob)
+
+--- @param sep string
+--- @param value string
+--- @return table
+function stringSplit(sep, value, converter)
+  local converter = converter or tostring
+  local result = {}
+  for entry in value:gmatch("([^"..sep.."]*)") do
+    table.insert(result, converter(entry))
+  end
+  return result
+end
+
+function tostringArray(value)
+  return stringSplit(" ", value, tostring)
+end
+
+function tonumberArray(value)
+  return stringSplit(" ", value, tonumber)
+end
+
+--- @param value string
+--- @return string
+function trim(value)
+  return value:match("^%s*(.-)%s*$")
+end
+
+--- @class ManifestManager
+ManifestManager = {
+  directives = {
+    ["AddOnVersion"] = tonumber,
+    ["APIVersion"] = tonumberArray,
+    ["Author"] = trim,
+    ["DependsOn"] = tostringArray,
+    ["Description"] = trim,
+    ["DisableSavedVariablesAutoSaving"] = trim,
+    ["IsLibrary"] = atob,
+    ["OptionalDependsOn"] = tostringArray,
+    ["SavedVariables"] = tostringArray,
+    ["Title"] = trim,
+    ["Version"] = trim,
+  }
+}
+ManifestManager.__index = ManifestManager
+
+--- @return Manifest
+function ManifestManager.New()
+  --- @type Manifest
+  local manifest = {
+    APIVersion = nil,
+    AddOnVersion = nil,
+    Author = nil,
+    DependsOn = nil,
+    Description = nil,
+    DisableSavedVariablesAutoSaving = nil,
+    IsLibrary = nil,
+    OptionalDependsOn = nil,
+    SavedVariables = nil,
+    Title = nil,
+    Version = nil,
+  }
+  setmetatable(manifest, ManifestManager)
+  return manifest
+end
+
+--- @param fd file*
+--- @return string|nil errmsg
+function ManifestManager:LoadTxt(fd)
+  fd:seek("set")
+  for line in fd:lines("*l") do
+    local directive, value = line:match("^## (.-): (.*)$")
+    if directive ~= nil and value ~= nil then
+      local transformer = self.directives[directive]
+      if transformer == nil then
+        io.stderr:write(string.format("unknown directive %s skipped", directive))
+      elseif iscallable(transformer) then
+        self[directive] = transformer(value)
+      else
+        return string.format("unsupported non-callable transformer for directive %s", directive)
+      end
+    end
+  end
+  return nil
+end
+
+local manifestValueLuaTemplate = {
+  ["string"] = [[%s.%s = "%s"]],
+  ["number"] = [[%s.%s = %s]],
+  ["boolean"] = [[%s.%s = %s]],
+  ["table"] = [[%s.%s = {%s}]],
+}
+
+--- @param self Manifest
+--- @param fd file*
+--- @param addonName string
+function ManifestManager:ToLua(fd, addonName)
+  fd:write(string.format(manifestValueLuaTemplate["string"], addonName, "name", addonName), "\n")
+  fd:write(string.format(manifestValueLuaTemplate["string"], addonName, "title", self.Title), "\n")
+  fd:write(string.format(manifestValueLuaTemplate["string"], addonName, "author", self.Author), "\n")
+
+  -- if self.APIVersion ~= nil then
+  --   local apiVersions = table.concat(self.APIVersion, ",")
+  --   fd:write(string.format(manifestValueLuaTemplate["table"], addonName, "apiVersion", apiVersions), "\n")
+  -- end
+
+  -- fd:write(string.format(manifestValueLuaTemplate["number"], addonName, "addOnVersion", self.AddOnVersion), "\n")
+  fd:write(string.format(manifestValueLuaTemplate["string"], addonName, "version", self.Version), "\n")
+  -- fd:write(string.format(manifestValueLuaTemplate["boolean"], addonName, "isLibrary", self.IsLibrary), "\n")
+
+  if self.SavedVariables ~= nil then
+    fd:write(string.format("%s.savedVariables = {", addonName))
+    if #self.SavedVariables > 0 then
+      fd:write(string.format([["%s"]], table.concat(self.SavedVariables, [[","]])))
+    end
+    fd:write("}\n")
+  end
+  -- if self.DisableSavedVariablesAutoSaving ~= nil then
+  --   fd:write(string.format("%s.disableSavedVariablesAutoSaving = \"%s\"", addonName, self.DisableSavedVariablesAutoSaving), "\n")
+  -- end
+  -- if self.DependsOn ~= nil then
+  --   fd:write(string.format("%s.dependsOn = {\"%s\"}", addonName, table.concat(self.DependsOn, "\",\"")), "\n")
+  -- end
+  -- if self.OptionalDependsOn ~= nil then
+  --   fd:write(string.format("%s.optionalDependsOn = {\"%s\"}", addonName, table.concat(self.OptionalDependsOn, "\",\"")), "\n")
+  -- end
+  fd:write(string.format("%s.description = \"%s\"", addonName, self.Description), "\n")
+end
+
+function manifest_get()
+  local pwd = getPwd()
+  local addonName = pwd:match("[^/]+$")
+  local addonManifestTxtFile = addonName .. ".txt"
+
+  local fd, err = io.open(addonManifestTxtFile, "r")
+  if fd == nil and err == addonManifestTxtFile .. ": No such file or directory" then
+    error("Please run this command inside an addon directory.")
+  end
+  if err ~= nil then
+    error(err)
+  end
+
+  local manifest = ManifestManager.New()
+  local err = manifest:LoadTxt(fd)
+  fd:close()
+  if err ~= nil then
+    error(err)
+  end
+
+  print(addonName)
+  for k,v in pairs(manifest) do
+    print(string.format("%s: %s (%s)", k, v, type(v)))
+    if type(v) == "table" then
+      for _,tv in ipairs(v) do
+        print(string.format("%s: %s (%s)", k, tv, type(tv)))
+      end
+    end
+  end
+end
+
+function generate_info()
+  local pwd = getPwd()
+  local addonName = pwd:match("[^/]+$")
+  local addonManifestTxtFile = addonName .. ".txt"
+  local addonManifestLuaFile = "Manifest.lua"
+
+  local fd, err = io.open(addonManifestTxtFile, "r")
+  if fd == nil and err == addonManifestTxtFile .. ": No such file or directory" then
+    error("Please run this command inside an addon directory.")
+  end
+  if err ~= nil then
+    error(err)
+  end
+
+  local manifest = ManifestManager.New()
+  err = manifest:LoadTxt(fd)
+  fd:close()
+  if err ~= nil then
+    error(err)
+  end
+
+  fd, err = io.open(addonManifestLuaFile, "w+")
+  if err ~= nil then
+    error(err)
+  end
+
+  manifest:ToLua(fd, addonName)
+  fd:close()
+
+  -- TODO check if the text manifest loads the lua counterpart
+end
+
+local function main()
+  local commands = {
+    ["generate"] = {
+      ["info"] = generate_info,
+    },
+    ["manifest"] = {
+      ["get"] = manifest_get,
+    },
+  }
+
+  local command = commands
+  for index,term in ipairs(arg) do
+    command = command[term]
+    if command == nil then
+      error(string.format("unknown command %s", term))
+    end
+    if type(command) == "function" then
+      return command(table.unpack(arg, index+1))
+    end
+  end
+  -- if it ends here, then it means no leaf command was triggered
+  error("no command found")
+end
+
+if debug.getinfo(3) == nil then
+  return main()
+end
+-- vim: ft=lua

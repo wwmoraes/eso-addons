@@ -1,0 +1,14 @@
+## Title: StatusManager
+## Author: Algwyn
+## APIVersion: 101032
+## AddOnVersion: 1
+## Version: 0.1.0
+## IsLibrary: false
+## SavedVariables: StatusManagerVars
+## DependsOn: LibPreferences LibAddonMenu-2.0
+## Description: Easy status control with icon on chat box, slash commands, and automated changes based on your activity.
+
+StatusManager.lua
+Manifest.lua
+UI.lua
+UI.xml
