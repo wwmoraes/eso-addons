@@ -11,6 +11,8 @@ on:
 
 env:
   luaVersion: 5.1.5
+  addonName: ${addonName}
+  addonID: ${addonID}
 
 jobs:
   lint:
@@ -35,6 +37,37 @@ jobs:
       - name: Lint code
         uses: nebularg/actions-luacheck@v1
         with:
-          files: addons/${addonName}
+          files: addons/${{ env.addonName }}
 
       # TODO "lint"/check ESOUI XML
+
+  publish:
+    runs-on: ubuntu-20.04
+    env:
+      manifestFilePath: addons/${{ env.addonName }}/${{ env.addonName }}.txt
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 1
+
+      - name: Extract version
+        run: |
+          version=$(grep "## Version:" ${{ env.manifestFilePath }} | cut -d' ' -f3)
+          echo "::set-env name=version::$version"
+          archiveFileName="${{ env.addonName }}-${version}.zip"
+          echo "::set-env name=archiveFileName::$archiveFileName"
+
+      - name: Create artifact
+        run: zip -r -9 "../${{ env.archiveFileName }}" "${{ env.addonName }}" -x "${{ env.addonName }}/.*"
+        working-directory: addons
+
+      - name: Publish on ESO UI
+        uses: Xeio/esoui-deploy-action@main
+        with:
+          addon-file-path: ${{ env.manifestFilePath }}
+          upload-zip-path: ${{ env.archiveFileName }}
+          addon-id: ${{ env.addonID }}
+          eso-ui-api-key: ${{ secrets.ESOUI_API_TOKEN }}
+          github-api-key: ${{ secrets.GITHUB_TOKEN }}
+          test-only: true
